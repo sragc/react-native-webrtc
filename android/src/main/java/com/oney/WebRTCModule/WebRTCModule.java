@@ -43,6 +43,7 @@ import android.hardware.Camera.Size;
 
 import org.webrtc.*;
 
+
 public class WebRTCModule extends ReactContextBaseJavaModule {
     final static String TAG = WebRTCModule.class.getCanonicalName();
 
@@ -334,6 +335,12 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         }
 
         return conf;
+    }
+
+    @ReactMethod
+    public void mediaRecorderInit() {
+
+        MediaRecorder recorder = null;
     }
 
     @ReactMethod
