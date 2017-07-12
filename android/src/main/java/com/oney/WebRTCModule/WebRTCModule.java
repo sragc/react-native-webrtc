@@ -1,5 +1,10 @@
 package com.oney.WebRTCModule;
 
+import android.annotation.TargetApi;
+import android.media.CamcorderProfile;
+import android.media.MediaRecorder;
+import android.os.Build;
+import android.os.Environment;
 import android.support.annotation.Nullable;
 
 import com.facebook.react.bridge.Arguments;
@@ -16,6 +21,7 @@ import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.bridge.ReadableType;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -47,6 +53,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
     public final Map<String, MediaStream> mMediaStreams;
     public final Map<String, MediaStreamTrack> mMediaStreamTracks;
     private final Map<String, VideoCapturer> mVideoCapturers;
+    private final Map<String, MediaRecorder> mMediaRecorders;
 
     public WebRTCModule(ReactApplicationContext reactContext) {
         super(reactContext);
@@ -55,6 +62,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         mMediaStreams = new HashMap<String, MediaStream>();
         mMediaStreamTracks = new HashMap<String, MediaStreamTrack>();
         mVideoCapturers = new HashMap<String, VideoCapturer>();
+        mMediaRecorders = new HashMap<>();
 
         PeerConnectionFactory.initializeAndroidGlobals(reactContext, true, true, true);
         mFactory = new PeerConnectionFactory();
@@ -481,7 +489,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
         // NOTE: we don't need videoConstraints for now since createVideoSource doesn't accept
         //   videoConstraints, we should extract resolution and pass to startCapture
 
-        // TODO: change getUserMedia constraints format to support new syntax 
+        // TODO: change getUserMedia constraints format to support new syntax
         //   constraint format seems changed, and there is no mandatory any more.
         //   and has a new sytax/attrs to specify resolution
         //   should change `parseConstraints()` according
@@ -511,7 +519,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                 break;
             case Map:
                 video = constraints.getMap("video");
-                if (video.hasKey("mandatory") && 
+                if (video.hasKey("mandatory") &&
                         video.getType("mandatory") == ReadableType.Map) {
                     videoConstraintsManatory = video.getMap("mandatory");
                 }
@@ -521,7 +529,7 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                     errorCallback.invoke(null, "video mandatory constraints not found");
                     return;
                 }
-                
+
                 //videoConstraints = parseConstraints(video);
                 sourceId = getSourceIdConstraint(video);
                 facingMode
@@ -574,6 +582,8 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                             DEFAULT_FPS;
 
                     videoSource = mFactory.createVideoSource(videoCapturer);
+                    CameraVideoCapturer cameraCapturer = (CameraVideoCapturer)videoCapturer;
+                    cameraCapturer.
                     videoCapturer.startCapture(videoWidth, videoHeight, videoFps);
 
                     trackId = getNextTrackUUID();
@@ -771,6 +781,60 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
                     = (CameraVideoCapturer) videoCapturer;
                 cameraVideoCapturer.switchCamera(null);
             }
+        }
+    }
+
+    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+    @ReactMethod
+    public void record(final String id) {
+        MediaStreamTrack track = mMediaStreamTracks.get(id);
+        if (track != null) {
+            VideoCapturer videoCapturer = mVideoCapturers.get(id);
+            if (videoCapturer != null) {
+                CameraVideoCapturer cameraVideoCapturer
+                        = (CameraVideoCapturer) videoCapturer;
+                final MediaRecorder mr = new MediaRecorder();
+                mr.setAudioSource(MediaRecorder.AudioSource.MIC);
+                mr.setVideoSource(MediaRecorder.VideoSource.SURFACE);
+                //mr.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+                mr.setOutputFile(Environment
+                        .getExternalStorageDirectory() + "/video"+ System.currentTimeMillis()+".mp4");
+                //mr.setVideoSize(1920, 1080);
+                //mr.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
+                //mr.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB);
+                //mr.setVideoEncodingBitRate();
+                //mr.setVideoFrameRate(30);
+                mr.setProfile(CamcorderProfile.get(CamcorderProfile.QUALITY_HIGH));
+                try {
+                    mr.prepare();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    Log.d("JAMSHACK", "Failed to prepare a MediaRecorder");
+                }
+                cameraVideoCapturer.addMediaRecorderToCamera(mr, new CameraVideoCapturer.MediaRecorderHandler() {
+                    @Override
+                    public void onMediaRecorderSuccess() {
+                        mMediaRecorders.put(id, mr);
+                        Log.d("JAMSHACK", "ADDED a MediaRecorder");
+                        mr.start();
+                    }
+
+                    @Override
+                    public void onMediaRecorderError(String s) {
+                        Log.e("JAMSHACK", "Error adding MediaRecorder " + s);
+                    }
+                });
+            }
+        }
+
+    }
+
+    @ReactMethod
+    public void stopRecord(final String id) {
+        MediaRecorder mr = mMediaRecorders.get(id);
+        if(mr != null) {
+            mr.stop();
+            mr.reset();
         }
     }
 
